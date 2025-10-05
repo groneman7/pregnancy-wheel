@@ -5,18 +5,34 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-export function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
-    const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
+export function polar(cx: number, cy: number, r: number, deg: number) {
+    // Make 0° at top, clockwise positive
+    const rad = ((deg - 90) * Math.PI) / 180;
     return {
-        x: centerX + radius * Math.cos(angleInRadians),
-        y: centerY + radius * Math.sin(angleInRadians),
+        x: cx + r * Math.cos(rad),
+        y: cy + r * Math.sin(rad),
     };
 }
 
-export function describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number): string {
-    const start = polarToCartesian(x, y, radius, endAngle);
-    const end = polarToCartesian(x, y, radius, startAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+export function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number, cw?: boolean) {
+    const start = polar(cx, cy, r, startDeg);
+    const end = polar(cx, cy, r, endDeg);
 
-    return ["M", x, y, "L", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y, "Z"].join(" ");
+    // Normalize delta in [0, 360)
+    const delta = (((endDeg - startDeg) % 360) + 360) % 360;
+
+    const largeArcFlag = delta > 180 ? 1 : 0;
+    const sweepFlag = cw ? 1 : 0;
+
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${end.x} ${end.y}`;
+}
+
+export function describeArc2(x: number, y: number, r: number, startDeg: number, endDeg: number, cw?: boolean): string {
+    const start = polar(x, y, r, endDeg);
+    const end = polar(x, y, r, startDeg);
+
+    const largeArcFlag = endDeg - startDeg <= 180 ? "0" : "1";
+    const sweepFlag = cw ? 1 : 0; // 👈 toggle arc direction
+
+    return `M ${x} ${y} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${end.x} ${end.y} Z`;
 }

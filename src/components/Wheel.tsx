@@ -1,6 +1,9 @@
 import { Fragment } from "react";
 import { describeArc, cn, describeArc2 } from "@/lib/utils";
 import dayjs, { type Dayjs } from "dayjs";
+import dayOfYear from "dayjs/plugin/dayOfYear";
+
+dayjs.extend(dayOfYear);
 
 const WIDTH = 1024;
 const HEIGHT = 896;
@@ -14,34 +17,35 @@ const DEG_PER_DAY = 360 / 365;
 const TICK_LONG = 32;
 const TICK_SHORT = 16;
 
+const REFERENCE_DATE = dayjs();
+const DEFAULT_LMP = dayjs().subtract(10, "weeks");
+const DEFAULT_OFFSET_DAYS = -REFERENCE_DATE.dayOfYear();
+
 function createDaysArray() {
     const today = dayjs();
     const array: Dayjs[] = [];
 
-    // for (let i = -182; i < 183; i++) {
-    //     array.push(today.add(i, "day"));
-    // }
-
-    for (let i = 0; i < 365; i++) {
+    for (let i = -70; i < 365 - 70; i++) {
         array.push(today.add(i, "day"));
     }
 
     return array;
 }
 
-export function Wheel() {
+type WheelProps = {
+    offset?: number;
+};
+
+export function Wheel({ offset = 0 }: WheelProps) {
     const days = createDaysArray();
-    const monthStartIdx = days.reduce<number[]>((acc, d, i) => {
-        if (d.date() === 1) acc.push(i);
+    const monthStarts = days.reduce<Dayjs[]>((acc, d) => {
+        if (d.date() === 1) acc.push(d);
         return acc;
     }, []);
 
-    const monthArcs = monthStartIdx.map((startIdx, mi) => {
-        const startDate = days[startIdx];
-        const daysInMonth = startDate.daysInMonth();
-
-        const startAngle = angle(startIdx);
-        const endAngle = startAngle + daysInMonth * DEG_PER_DAY;
+    const monthArcs = monthStarts.map((monthStart, mi) => {
+        const startAngle = angle(monthStart.dayOfYear());
+        const endAngle = startAngle + monthStart.daysInMonth() * DEG_PER_DAY;
 
         const id = `month-arc-${mi}`;
         const d = describeArc(CENTER_X, CENTER_Y, RADIUS_LABEL, startAngle, endAngle, true);
@@ -52,13 +56,13 @@ export function Wheel() {
         return {
             id,
             d,
-            label: startDate.format("MMMM").toUpperCase(),
+            label: monthStart.format("MMMM").toUpperCase(),
             // midAngle,
         };
     });
 
-    function angle(i: number, offset: number = 0) {
-        return (i + offset) * DEG_PER_DAY;
+    function angle(n: number, offset: number = DEFAULT_OFFSET_DAYS) {
+        return (n + offset) * DEG_PER_DAY;
     }
 
     return (
@@ -133,6 +137,7 @@ export function Wheel() {
                                     className={cn(
                                         "stroke-black",
                                         date.isSame(dayjs(), "day") && "stroke-blue-600 stroke-2",
+                                        date.isSame(DEFAULT_LMP, "date") && "stroke-pink-600 stroke-2",
                                         date.month() === 0 && date.date() === 1 && "stroke-red-600 stroke-2",
                                         date.month() === 11 && date.date() === 31 && "stroke-emerald-600 stroke-2"
                                     )}
@@ -141,17 +146,16 @@ export function Wheel() {
                                     y1={CENTER_Y - RADIUS_INNER}
                                     x2={CENTER_X}
                                     y2={CENTER_Y - (RADIUS_INNER + tickLength)}
-                                    transform={`rotate(${angle(i)} ${CENTER_X} ${CENTER_Y})`}
+                                    transform={`rotate(${angle(date.dayOfYear())} ${CENTER_X} ${CENTER_Y})`}
                                 />
                                 {isMultipleOf5 && date.date() !== 30 && (
                                     <text
-                                        className="text-[9px]"
+                                        className="text-xs"
                                         x={CENTER_X}
                                         y={CENTER_Y - (RADIUS_INNER + tickLength + 6)}
                                         textAnchor="middle"
                                         dominantBaseline="middle"
-                                        transform={`rotate(${angle(i)} ${CENTER_X} ${CENTER_Y})`}
-                                        fontFamily="system-ui, sans-serif"
+                                        transform={`rotate(${angle(date.dayOfYear())} ${CENTER_X} ${CENTER_Y})`}
                                         fill="black">
                                         {date.date()}
                                     </text>
@@ -161,22 +165,79 @@ export function Wheel() {
                     })}
                 </g>
 
+                {/* GA tick marks */}
+                <g className="ga-ticks">
+                    {days.map((date, i) => {
+                        const isWeekStart =
+                            date.isAfter(DEFAULT_LMP.add(2, "weeks").add(1, "day")) &&
+                            date.isBefore(DEFAULT_LMP.add(44, "weeks").add(1, "day")) &&
+                            DEFAULT_LMP.add(2, "weeks").diff(date, "day") % 7 === 0;
+
+                        return isWeekStart ? (
+                            <>
+                                <line
+                                    className={cn(
+                                        "stroke-black",
+                                        date.isSame(dayjs(), "day") && "stroke-blue-600 stroke-2",
+                                        date.month() === 0 && date.date() === 1 && "stroke-red-600 stroke-2",
+                                        date.month() === 11 && date.date() === 31 && "stroke-emerald-600 stroke-2"
+                                    )}
+                                    key={i}
+                                    x1={CENTER_X}
+                                    y1={CENTER_Y - RADIUS_INNER + 20}
+                                    x2={CENTER_X}
+                                    y2={CENTER_Y - RADIUS_INNER}
+                                    transform={`rotate(${angle(date.dayOfYear())} ${CENTER_X} ${CENTER_Y})`}
+                                />
+                                <text
+                                    className="text-sm"
+                                    x={CENTER_X}
+                                    y={CENTER_Y - (RADIUS_INNER - 32)}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    transform={`rotate(${angle(date.dayOfYear())} ${CENTER_X} ${CENTER_Y})`}
+                                    fill="black">
+                                    {date.diff(DEFAULT_LMP.add(2, "weeks"), "weeks")}
+                                </text>
+                            </>
+                        ) : null;
+                    })}
+                </g>
+
                 {/* Inner colored sections */}
                 <g className="trimester-sections">
                     {/* 1st Trimester (purple) */}
                     <path
                         className="fill-violet-600/40"
-                        d={describeArc2(CENTER_X, CENTER_Y, RADIUS_INNER, angle(98 * 0), angle(98 * 1))}
+                        d={describeArc2(
+                            CENTER_X,
+                            CENTER_Y,
+                            RADIUS_INNER,
+                            angle(DEFAULT_LMP.add(2, "weeks").dayOfYear()),
+                            angle(DEFAULT_LMP.add(16, "weeks").dayOfYear())
+                        )}
                     />
                     {/* 2nd Trimester (purple) */}
                     <path
                         className="fill-pink-400/50"
-                        d={describeArc2(CENTER_X, CENTER_Y, RADIUS_INNER, angle(98 * 1), angle(98 * 2))}
+                        d={describeArc2(
+                            CENTER_X,
+                            CENTER_Y,
+                            RADIUS_INNER,
+                            angle(DEFAULT_LMP.add(16, "weeks").dayOfYear()),
+                            angle(DEFAULT_LMP.add(30, "weeks").dayOfYear())
+                        )}
                     />
                     {/* 3rd Trimester (purple) */}
                     <path
                         className="fill-cyan-400/40"
-                        d={describeArc2(CENTER_X, CENTER_Y, RADIUS_INNER, angle(98 * 2), angle(98 * 3))}
+                        d={describeArc2(
+                            CENTER_X,
+                            CENTER_Y,
+                            RADIUS_INNER,
+                            angle(DEFAULT_LMP.add(30, "weeks").dayOfYear()),
+                            angle(DEFAULT_LMP.add(44, "weeks").dayOfYear())
+                        )}
                     />
                 </g>
 
